@@ -1,38 +1,43 @@
-"use client"; // Zwingend erforderlich für useState/useEffect in Next.js
+"use client";
 
 import { useState, useEffect } from 'react';
-import { ref, onValue } from 'firebase/database';
-// WICHTIG: Achte auf diesen Pfad! Er zeigt auf die firebase.js eine Ebene höher.
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase';
 
 export default function Home() {
-  const [moisture, setMoisture] = useState(0);
-  const [battery, setBattery] = useState(0);
+  const [moisture, setMoisture] = useState<number | null>(null);
+  const [battery, setBattery] = useState<number | null>(null);
+  const [history, setHistory] = useState<any[]>([]);
   const [lastUpdate, setLastUpdate] = useState('');
-  const [status, setStatus] = useState('Lade...');
 
   useEffect(() => {
-    // Referenz auf unsere Datenbank
-    const currentDataRef = ref(db, 'hochbeet_1/aktuell');
+    // Abfrage: Gehe in "messungen", sortiere nach "zeitpunkt" absteigend, nimm die letzten 10
+    const q = query(
+      collection(db, "messungen"),
+      orderBy("zeitpunkt", "desc"),
+      limit(10)
+    );
 
-    // Live-Listener
-    const unsubscribe = onValue(currentDataRef, (snapshot) => {
-      const data = snapshot.val();
-      
-      if (data) {
-        setMoisture(data.feuchtigkeit);
-        setBattery(data.akku);
+    // Live-Listener für Firestore
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as any[];
+
+      if (docs.length > 0) {
+        // Der neueste Wert (Index 0 wegen desc Sortierung)
+        const newest = docs[0];
+        setMoisture(newest.feuchtigkeit);
+        setBattery(newest.akku);
         
-        const date = new Date(data.timestamp);
-        const timeString = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-        setLastUpdate(`Heute, ${timeString}`);
-
-        // Status-Logik aus deinen Anforderungen
-        if (data.feuchtigkeit < 30) {
-          setStatus('Trocken');
-        } else {
-          setStatus('Gut');
+        if (newest.zeitpunkt) {
+          const d = newest.zeitpunkt.toDate(); // Firestore Timestamps müssen konvertiert werden
+          setLastUpdate(d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }));
         }
+
+        // Verlauf für das Diagramm (wieder umdrehen für zeitliche Reihenfolge)
+        setHistory([...docs].reverse());
       }
     });
 
@@ -40,39 +45,53 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="dashboard-container">
-      <header>
-        <h1>🌱 Hochbeet Monitor</h1>
-        <p>Bodenfeuchte, Wetter und Verlauf</p>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif', backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
+      <header style={{ marginBottom: '30px', textAlign: 'center' }}>
+        <h1 style={{ color: '#2e7d32' }}>🌱 Hochbeet Monitor (Firestore)</h1>
+        <p>Präzise Überwachung & Statistik</p>
       </header>
 
-      <main className="grid-layout">
-        {/* Kachel 1: Bodenfeuchte */}
-        <div className="card">
-          <div className="card-header">
-            <h3>Bodenfeuchte</h3>
-            <span className={`badge ${status === 'Trocken' ? 'badge-red' : 'badge-green'}`}>
-              {status}
-            </span>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+        
+        {/* Kachel Feuchtigkeit */}
+        <div style={{ background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+          <h3>Bodenfeuchtigkeit</h3>
+          <div style={{ fontSize: '48px', fontWeight: 'bold', color: '#1976d2', margin: '15px 0' }}>
+            {moisture !== null ? `${moisture}%` : '--'}
           </div>
-          <div className="card-value">{moisture}%</div>
-          <div className="card-footer">Letztes Update: {lastUpdate}</div>
+          <p style={{ fontSize: '12px', color: '#666' }}>Zuletzt: {lastUpdate}</p>
         </div>
 
-        {/* Kachel 2: Akku */}
-        <div className="card">
-          <h3>Akku</h3>
-          <div className="card-value">{battery} V</div>
-          <div className="card-footer">Letztes Update: {lastUpdate}</div>
+        {/* Kachel Akku */}
+        <div style={{ background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+          <h3>System-Status</h3>
+          <div style={{ fontSize: '24px', margin: '15px 0' }}>
+            🔋 Akku: <strong>{battery !== null ? `${battery}V` : '--'}</strong>
+          </div>
+          <span style={{ color: (moisture || 0) < 30 ? '#d32f2f' : '#388e3c', fontWeight: 'bold' }}>
+            {(moisture || 0) < 30 ? '⚠️ Durstig' : '✅ Versorgt'}
+          </span>
         </div>
 
-        {/* Kachel 3: Wetter */}
-        <div className="card">
-          <h3>Wetter</h3>
-          <div className="card-value">18 °C</div>
-          <div className="card-footer">Leicht bewölkt</div>
+        {/* Statistik-Balken */}
+        <div style={{ background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', gridColumn: '1 / -1' }}>
+          <h3>Feuchtigkeitsverlauf (Letzte Messungen)</h3>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '120px', marginTop: '20px', borderBottom: '1px solid #ddd' }}>
+            {history.map((h, i) => (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ 
+                  width: '100%', 
+                  backgroundColor: '#4caf50', 
+                  height: `${h.feuchtigkeit}%`, 
+                  minHeight: '2px',
+                  borderRadius: '3px 3px 0 0' 
+                }}></div>
+              </div>
+            ))}
+          </div>
         </div>
-      </main>
+
+      </div>
     </div>
   );
 }

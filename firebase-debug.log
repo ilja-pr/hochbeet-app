@@ -1,0 +1,10 @@
+[debug] [2026-04-10T09:18:28.551Z] ----------------------------------------------------------------------
+[debug] [2026-04-10T09:18:28.552Z] Command:       /opt/homebrew/Cellar/node/23.10.0_1/bin/node /opt/homebrew/bin/firebase login
+[debug] [2026-04-10T09:18:28.552Z] CLI Version:   15.14.0
+[debug] [2026-04-10T09:18:28.552Z] Platform:      darwin
+[debug] [2026-04-10T09:18:28.552Z] Node Version:  v23.10.0
+[debug] [2026-04-10T09:18:28.552Z] Time:          Fri Apr 10 2026 11:18:28 GMT+0200 (Central European Summer Time)
+[debug] [2026-04-10T09:18:28.552Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-10T09:18:28.553Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] Already logged in as iproskur@stud.hs-offenburg.de
