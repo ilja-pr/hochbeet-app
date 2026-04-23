@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { onValue, ref } from "firebase/database";
 import { db } from "@/lib/firebase";
 import { weatherCodeToText } from "@/lib/weather-code";
+import { getWateringRecommendation } from "@/lib/watering";
+
 import DashboardHeader from "@/components/DashboardHeader";
 import MoistureCard from "@/components/MoistureCard";
-import WeatherCard from "@/components/WeatherCard";
-import OverviewCard from "@/components/OverviewCard";
 import MoistureChart from "@/components/MoistureChart";
+import OverviewCard from "@/components/OverviewCard";
+import WeatherCard from "@/components/WeatherCard";
+import WateringRecommendationCard from "@/components/WateringRecommendationCard";
 
 type CurrentData = {
   raw?: number;
@@ -24,18 +27,23 @@ type HistoryItem = {
   ts: number;
 };
 
+type WeatherDaily = {
+  weather_code?: number | null;
+  temperature_2m_max?: number | null;
+  temperature_2m_min?: number | null;
+  precipitation_probability_max?: number | null;
+  precipitation_sum?: number | null;
+  rain_sum?: number | null;
+};
+
 type WeatherData = {
   location?: string;
   current?: {
     temperature_2m?: number;
     weather_code?: number;
   };
-  daily?: {
-    temperature_2m_max?: number;
-    temperature_2m_min?: number;
-    precipitation_probability_max?: number;
-    weather_code?: number;
-  };
+  today?: WeatherDaily;
+  tomorrow?: WeatherDaily;
 };
 
 function formatDate(ts?: number) {
@@ -97,12 +105,21 @@ export default function HomePage() {
   }, [history]);
 
   const weatherText = weatherCodeToText(
-    weather?.current?.weather_code ?? weather?.daily?.weather_code
+    weather?.current?.weather_code ?? weather?.today?.weather_code
   );
+
+  const recommendation = getWateringRecommendation({
+    moisture: current?.moisture ?? 0,
+    rainProbabilityToday: weather?.today?.precipitation_probability_max ?? 0,
+    rainProbabilityTomorrow: weather?.tomorrow?.precipitation_probability_max ?? 0,
+    precipitationToday: weather?.today?.precipitation_sum ?? 0,
+    precipitationTomorrow: weather?.tomorrow?.precipitation_sum ?? 0,
+  });
 
   const overviewRows = [
     { label: "Bodenstatus", value: current?.status ?? "--" },
     { label: "Letzte Messung", value: formatDate(current?.updatedAt) },
+    { label: "Empfehlung", value: recommendation.title },
     { label: "Wetterlage", value: weatherText },
     {
       label: "Außentemperatur",
@@ -112,10 +129,17 @@ export default function HomePage() {
           : "--",
     },
     {
-      label: "Regenwahrscheinlichkeit",
+      label: "Regen heute",
       value:
-        weather?.daily?.precipitation_probability_max != null
-          ? `${weather.daily.precipitation_probability_max}%`
+        weather?.today?.precipitation_probability_max != null
+          ? `${weather.today.precipitation_probability_max}% · ${weather.today.precipitation_sum ?? 0} mm`
+          : "--",
+    },
+    {
+      label: "Regen morgen",
+      value:
+        weather?.tomorrow?.precipitation_probability_max != null
+          ? `${weather.tomorrow.precipitation_probability_max}% · ${weather.tomorrow.precipitation_sum ?? 0} mm`
           : "--",
     },
   ];
@@ -124,6 +148,15 @@ export default function HomePage() {
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl px-6 py-8 md:px-8">
         <DashboardHeader />
+
+        <div className="mb-5">
+          <WateringRecommendationCard
+            title={recommendation.title}
+            message={recommendation.message}
+            badge={recommendation.badge}
+            level={recommendation.level}
+          />
+        </div>
 
         <section className="grid gap-5 lg:grid-cols-[2fr_1fr]">
           <MoistureCard
@@ -136,7 +169,7 @@ export default function HomePage() {
           <WeatherCard
             temperature={weather?.current?.temperature_2m}
             weatherText={weatherText}
-            rain={weather?.daily?.precipitation_probability_max}
+            rain={weather?.today?.precipitation_probability_max}
           />
         </section>
 

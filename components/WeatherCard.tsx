@@ -13,7 +13,7 @@ export default function WeatherCard({ temperature, weatherText, rain }: Props) {
       </div>
       <p className="mt-3 text-lg text-slate-600">{weatherText}</p>
       <p className="mt-4 text-base text-slate-500">
-        Regenwahrscheinlichkeit: {rain != null ? `${rain}%` : "--"}
+        Regenwahrscheinlichkeit heute: {rain != null ? `${rain}%` : "--"}
       </p>
     </div>
   );
