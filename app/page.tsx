@@ -64,17 +64,27 @@ function formatTime(ts?: number) {
   });
 }
 
+function formatRain(prob?: number | null, amount?: number | null) {
+  if (prob == null) return "--";
+  return `${prob}% · ${amount ?? 0} mm`;
+}
+
 export default function HomePage() {
   const [current, setCurrent] = useState<CurrentData | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
 
   useEffect(() => {
     const plantRef = ref(db, "plants/plant1");
 
     const unsubscribe = onValue(plantRef, (snapshot) => {
       const data = snapshot.val();
-      if (!data) return;
+      if (!data) {
+        setCurrent(null);
+        setHistory([]);
+        return;
+      }
 
       setCurrent(data.current ?? null);
 
@@ -88,13 +98,31 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+
     async function loadWeather() {
-      const res = await fetch("/api/weather");
-      const json = await res.json();
-      setWeather(json);
+      try {
+        const res = await fetch("/api/weather", { cache: "no-store" });
+        const json = await res.json();
+        if (mounted) {
+          setWeather(json);
+        }
+      } catch (error) {
+        console.error("Wetter konnte nicht geladen werden:", error);
+      } finally {
+        if (mounted) {
+          setWeatherLoading(false);
+        }
+      }
     }
 
     loadWeather();
+    const interval = setInterval(loadWeather, 15 * 60 * 1000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const chartData = useMemo(() => {
@@ -120,7 +148,7 @@ export default function HomePage() {
     { label: "Bodenstatus", value: current?.status ?? "--" },
     { label: "Letzte Messung", value: formatDate(current?.updatedAt) },
     { label: "Empfehlung", value: recommendation.title },
-    { label: "Wetterlage", value: weatherText },
+    { label: "Wetterlage", value: weatherLoading ? "Lädt..." : weatherText },
     {
       label: "Außentemperatur",
       value:
@@ -130,17 +158,17 @@ export default function HomePage() {
     },
     {
       label: "Regen heute",
-      value:
-        weather?.today?.precipitation_probability_max != null
-          ? `${weather.today.precipitation_probability_max}% · ${weather.today.precipitation_sum ?? 0} mm`
-          : "--",
+      value: formatRain(
+        weather?.today?.precipitation_probability_max,
+        weather?.today?.precipitation_sum
+      ),
     },
     {
       label: "Regen morgen",
-      value:
-        weather?.tomorrow?.precipitation_probability_max != null
-          ? `${weather.tomorrow.precipitation_probability_max}% · ${weather.tomorrow.precipitation_sum ?? 0} mm`
-          : "--",
+      value: formatRain(
+        weather?.tomorrow?.precipitation_probability_max,
+        weather?.tomorrow?.precipitation_sum
+      ),
     },
   ];
 
@@ -168,7 +196,7 @@ export default function HomePage() {
 
           <WeatherCard
             temperature={weather?.current?.temperature_2m}
-            weatherText={weatherText}
+            weatherText={weatherLoading ? "Wetter wird geladen..." : weatherText}
             rain={weather?.today?.precipitation_probability_max}
           />
         </section>

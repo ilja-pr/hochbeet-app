@@ -19,6 +19,12 @@ type WateringInput = {
   precipitationTomorrow?: number | null;
 };
 
+function rainText(prob?: number | null, mm?: number | null, day = "heute") {
+  const p = prob ?? 0;
+  const m = mm ?? 0;
+  return `${day} sind ${p}% Regenwahrscheinlichkeit und etwa ${m} mm Niederschlag zu erwarten.`;
+}
+
 export function getWateringRecommendation(
   input: WateringInput
 ): WateringDecision {
@@ -28,22 +34,36 @@ export function getWateringRecommendation(
   const precipToday = input.precipitationToday ?? 0;
   const precipTomorrow = input.precipitationTomorrow ?? 0;
 
-  const strongRainSoon =
-    (rainToday >= 70 && precipToday >= 2) ||
-    (rainTomorrow >= 70 && precipTomorrow >= 2);
+  const strongRainToday = rainToday >= 70 && precipToday >= 2;
+  const strongRainTomorrow = rainTomorrow >= 70 && precipTomorrow >= 2;
 
-  const likelyRainSoon =
-    (rainToday >= 60 && precipToday >= 1) ||
-    (rainTomorrow >= 60 && precipTomorrow >= 1);
+  const likelyRainToday = rainToday >= 60 && precipToday >= 1;
+  const likelyRainTomorrow = rainTomorrow >= 60 && precipTomorrow >= 1;
 
   if (moisture <= 20) {
-    if (strongRainSoon) {
+    if (strongRainToday) {
       return {
         level: "wait_for_rain",
         title: "Regen abwarten",
-        message:
-          "Die Erde ist trocken, aber es wird bald relevanter Regen erwartet. Du kannst wahrscheinlich noch warten.",
+        message: `Die Erde ist trocken, aber ${rainText(
+          rainToday,
+          precipToday,
+          "heute"
+        )} Du kannst wahrscheinlich noch warten.`,
         badge: "Warten",
+      };
+    }
+
+    if (strongRainTomorrow) {
+      return {
+        level: "watch",
+        title: "Heute beobachten",
+        message: `Die Erde ist trocken. ${rainText(
+          rainTomorrow,
+          precipTomorrow,
+          "morgen"
+        )} Wenn die Pflanze schon schlapp wirkt, lieber heute leicht gießen.`,
+        badge: "Beobachten",
       };
     }
 
@@ -57,12 +77,28 @@ export function getWateringRecommendation(
   }
 
   if (moisture <= 40) {
-    if (strongRainSoon || likelyRainSoon) {
+    if (strongRainToday || likelyRainToday) {
       return {
         level: "wait_for_rain",
         title: "Noch warten",
-        message:
-          "Die Erde ist eher trocken, aber Regen ist wahrscheinlich. Beobachte den Boden und warte zunächst ab.",
+        message: `Die Erde ist eher trocken, aber ${rainText(
+          rainToday,
+          precipToday,
+          "heute"
+        )} Erst einmal abwarten.`,
+        badge: "Warten",
+      };
+    }
+
+    if (strongRainTomorrow || likelyRainTomorrow) {
+      return {
+        level: "wait_for_rain",
+        title: "Regen wahrscheinlich",
+        message: `Die Erde ist eher trocken, aber ${rainText(
+          rainTomorrow,
+          precipTomorrow,
+          "morgen"
+        )} Wahrscheinlich musst du noch nicht gießen.`,
         badge: "Warten",
       };
     }
@@ -88,7 +124,8 @@ export function getWateringRecommendation(
   return {
     level: "no_water",
     title: "Nicht gießen",
-    message: "Die Erde ist bereits sehr feucht. Zusätzliche Bewässerung ist nicht nötig.",
+    message:
+      "Die Erde ist bereits sehr feucht. Zusätzliche Bewässerung ist nicht nötig.",
     badge: "Feucht",
   };
 }
