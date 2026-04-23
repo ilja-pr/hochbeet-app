@@ -1,115 +1,150 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ref, onValue, set } from "firebase/database";
-import { db } from "@/firebase";
+import { onValue, ref } from "firebase/database";
+import { db } from "@/lib/firebase";
+import { weatherCodeToText } from "@/lib/weather-code";
+import DashboardHeader from "@/components/DashboardHeader";
+import MoistureCard from "@/components/MoistureCard";
+import WeatherCard from "@/components/WeatherCard";
+import OverviewCard from "@/components/OverviewCard";
+import MoistureChart from "@/components/MoistureChart";
 
 type CurrentData = {
   raw?: number;
   moisture?: number;
+  status?: string;
   updatedAt?: number;
 };
 
 type HistoryItem = {
   raw: number;
   moisture: number;
+  status?: string;
   ts: number;
 };
 
-export default function Home() {
+type WeatherData = {
+  location?: string;
+  current?: {
+    temperature_2m?: number;
+    weather_code?: number;
+  };
+  daily?: {
+    temperature_2m_max?: number;
+    temperature_2m_min?: number;
+    precipitation_probability_max?: number;
+    weather_code?: number;
+  };
+};
+
+function formatDate(ts?: number) {
+  if (!ts) return "--";
+  return new Date(ts).toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatTime(ts?: number) {
+  if (!ts) return "--";
+  return new Date(ts).toLocaleTimeString("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export default function HomePage() {
   const [current, setCurrent] = useState<CurrentData | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
 
   useEffect(() => {
     const plantRef = ref(db, "plants/plant1");
 
     const unsubscribe = onValue(plantRef, (snapshot) => {
       const data = snapshot.val();
-
-      if (!data) {
-        setCurrent(null);
-        setHistory([]);
-        setLoading(false);
-        return;
-      }
+      if (!data) return;
 
       setCurrent(data.current ?? null);
 
       const historyObj = data.history ?? {};
       const historyArray: HistoryItem[] = Object.values(historyObj);
-      historyArray.sort((a, b) => b.ts - a.ts);
-      setHistory(historyArray.slice(0, 20));
-
-      setLoading(false);
+      historyArray.sort((a, b) => a.ts - b.ts);
+      setHistory(historyArray.slice(-12));
     });
 
     return () => unsubscribe();
   }, []);
 
-  const statusText = useMemo(() => {
-    const m = current?.moisture ?? 0;
-    if (m < 15) return "Durstig";
-    if (m <= 60) return "Optimal";
-    if (m <= 85) return "Sehr feucht";
-    return "Sehr nass";
-  }, [current]);
+  useEffect(() => {
+    async function loadWeather() {
+      const res = await fetch("/api/weather");
+      const json = await res.json();
+      setWeather(json);
+    }
 
-  async function handleWaterNow() {
-    await set(ref(db, "plants/plant1/commands/waterNow"), true);
-  }
+    loadWeather();
+  }, []);
+
+  const chartData = useMemo(() => {
+    return history.map((item) => ({
+      time: formatTime(item.ts),
+      moisture: item.moisture,
+    }));
+  }, [history]);
+
+  const weatherText = weatherCodeToText(
+    weather?.current?.weather_code ?? weather?.daily?.weather_code
+  );
+
+  const overviewRows = [
+    { label: "Bodenstatus", value: current?.status ?? "--" },
+    { label: "Letzte Messung", value: formatDate(current?.updatedAt) },
+    { label: "Wetterlage", value: weatherText },
+    {
+      label: "Außentemperatur",
+      value:
+        weather?.current?.temperature_2m != null
+          ? `${Math.round(weather.current.temperature_2m)} °C`
+          : "--",
+    },
+    {
+      label: "Regenwahrscheinlichkeit",
+      value:
+        weather?.daily?.precipitation_probability_max != null
+          ? `${weather.daily.precipitation_probability_max}%`
+          : "--",
+    },
+  ];
 
   return (
-    <div style={{ padding: "20px", fontFamily: "sans-serif", backgroundColor: "#f0f2f5", minHeight: "100vh" }}>
-      <header style={{ marginBottom: "30px", textAlign: "center" }}>
-        <h1 style={{ color: "#2e7d32" }}>🌱 Hochbeet Monitor</h1>
-        <p>Realtime Database</p>
-      </header>
+    <main className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-7xl px-6 py-8 md:px-8">
+        <DashboardHeader />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
-        <div style={{ background: "white", padding: "20px", borderRadius: "15px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
-          <h3>Bodenfeuchtigkeit</h3>
-          <div style={{ fontSize: "48px", fontWeight: "bold", color: "#1976d2", margin: "15px 0" }}>
-            {loading ? "--" : current?.moisture ?? "--"}%
-          </div>
-          <p>Rohwert: {current?.raw ?? "--"}</p>
-          <p>Status: {statusText}</p>
-          <p>
-            Zuletzt:{" "}
-            {current?.updatedAt
-              ? new Date(current.updatedAt).toLocaleString("de-DE")
-              : "--"}
-          </p>
-          <button onClick={handleWaterNow}>Jetzt gießen</button>
-        </div>
+        <section className="grid gap-5 lg:grid-cols-[2fr_1fr]">
+          <MoistureCard
+            moisture={current?.moisture}
+            raw={current?.raw}
+            status={current?.status}
+            updatedAt={current?.updatedAt}
+          />
 
-        <div style={{ background: "white", padding: "20px", borderRadius: "15px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", gridColumn: "1 / -1" }}>
-          <h3>Verlauf</h3>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", height: "120px", marginTop: "20px", borderBottom: "1px solid #ddd" }}>
-            {history.map((h, i) => (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
-                <div
-                  style={{
-                    width: "100%",
-                    backgroundColor: "#4caf50",
-                    height: `${h.moisture}%`,
-                    minHeight: "2px",
-                    borderRadius: "3px 3px 0 0",
-                  }}
-                />
-              </div>
-            ))}
-          </div>
+          <WeatherCard
+            temperature={weather?.current?.temperature_2m}
+            weatherText={weatherText}
+            rain={weather?.daily?.precipitation_probability_max}
+          />
+        </section>
 
-          <div style={{ marginTop: "20px" }}>
-            {history.map((h, i) => (
-              <div key={i} style={{ padding: "8px 0", borderTop: "1px solid #eee" }}>
-                {new Date(h.ts).toLocaleString("de-DE")} — {h.moisture}% — Rohwert {h.raw}
-              </div>
-            ))}
-          </div>
-        </div>
+        <section className="mt-5 grid gap-5 lg:grid-cols-[2fr_1fr]">
+          <MoistureChart data={chartData} />
+          <OverviewCard rows={overviewRows} />
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
