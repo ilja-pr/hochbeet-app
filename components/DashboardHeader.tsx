@@ -1,6 +1,8 @@
+import AuthButton from "@/components/AuthButton";
+
 export default function DashboardHeader() {
   return (
-    <header className="mb-8 flex items-center justify-between">
+    <header className="mb-8 flex items-start justify-between gap-4">
       <div>
         <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">
           Hochbeet Monitor
@@ -9,6 +11,8 @@ export default function DashboardHeader() {
           Bodenfeuchte, Wetter und Verlauf
         </p>
       </div>
+
+      <AuthButton />
     </header>
   );
 }
