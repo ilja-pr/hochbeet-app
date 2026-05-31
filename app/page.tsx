@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { onValue, ref } from "firebase/database";
+import { onValue, ref, query, limitToLast, orderByChild } from "firebase/database";
 import { db } from "@/lib/firebase";
 import { weatherCodeToText } from "@/lib/weather-code";
 import { getWateringRecommendation } from "@/lib/watering";
@@ -56,12 +56,14 @@ function formatDate(ts?: number) {
   });
 }
 
-function formatTime(ts?: number) {
-  if (!ts) return "--";
-  return new Date(ts).toLocaleTimeString("de-DE", {
+function formatWeekLabel(ts: number) {
+  const date = new Date(ts);
+  const weekday = date.toLocaleDateString("de-DE", { weekday: "short" });
+  const time = date.toLocaleTimeString("de-DE", {
     hour: "2-digit",
     minute: "2-digit",
   });
+  return `${weekday} ${time}`;
 }
 
 function formatRain(prob?: number | null, amount?: number | null) {
@@ -76,25 +78,37 @@ export default function HomePage() {
   const [weatherLoading, setWeatherLoading] = useState(true);
 
   useEffect(() => {
-    const plantRef = ref(db, "plants/plant1");
+    // Aktueller Wert
+    const currentRef = ref(db, "plants/plant1/current");
+    const unsubCurrent = onValue(currentRef, (snapshot) => {
+      setCurrent(snapshot.val() ?? null);
+    });
 
-    const unsubscribe = onValue(plantRef, (snapshot) => {
+    // History: bis zu 400 Einträge laden (7 Tage * 48 Messungen + Reserve)
+    const historyRef = query(
+      ref(db, "plants/plant1/history"),
+      orderByChild("ts"),
+      limitToLast(400)
+    );
+    const unsubHistory = onValue(historyRef, (snapshot) => {
       const data = snapshot.val();
       if (!data) {
-        setCurrent(null);
         setHistory([]);
         return;
       }
+      const arr: HistoryItem[] = Object.values(data);
+      arr.sort((a, b) => a.ts - b.ts);
 
-      setCurrent(data.current ?? null);
-
-      const historyObj = data.history ?? {};
-      const historyArray: HistoryItem[] = Object.values(historyObj);
-      historyArray.sort((a, b) => a.ts - b.ts);
-      setHistory(historyArray.slice(-12));
+      // Nur die letzten 7 Tage anzeigen
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const lastWeek = arr.filter((item) => item.ts >= sevenDaysAgo);
+      setHistory(lastWeek);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubCurrent();
+      unsubHistory();
+    };
   }, []);
 
   useEffect(() => {
@@ -127,7 +141,7 @@ export default function HomePage() {
 
   const chartData = useMemo(() => {
     return history.map((item) => ({
-      time: formatTime(item.ts),
+      time: formatWeekLabel(item.ts),
       moisture: item.moisture,
     }));
   }, [history]);

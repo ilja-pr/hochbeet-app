@@ -16,26 +16,35 @@ type Item = {
 };
 
 export default function MoistureChart({ data }: { data: Item[] }) {
+  // Bei vielen Punkten: X-Achse ausdünnen, damit Labels lesbar bleiben
+  const interval = data.length > 24 ? Math.floor(data.length / 8) : 0;
+
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
       <h2 className="text-3xl font-bold tracking-tight text-slate-900">
         Verlauf der Bodenfeuchte
       </h2>
-      <p className="mt-2 text-lg text-slate-500">Die letzten Messwerte vom Sensor.</p>
+      <p className="mt-2 text-lg text-slate-500">
+        Die letzten 7 Tage ({data.length} Messpunkte)
+      </p>
 
       <div className="mt-6 h-80 w-full">
         <ResponsiveContainer>
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="4 4" />
-            <XAxis dataKey="time" />
+            <XAxis
+              dataKey="time"
+              interval={interval}
+              tick={{ fontSize: 12 }}
+            />
             <YAxis domain={[0, 100]} unit="%" />
             <Tooltip />
             <Line
               type="monotone"
               dataKey="moisture"
               stroke="#2563eb"
-              strokeWidth={3}
-              dot={{ r: 4 }}
+              strokeWidth={2}
+              dot={data.length > 50 ? false : { r: 3 }}
             />
           </LineChart>
         </ResponsiveContainer>

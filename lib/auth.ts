@@ -8,7 +8,6 @@ import {
   onAuthStateChanged,
   type User,
 } from "firebase/auth";
-import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
@@ -21,7 +20,6 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getDatabase(app);
 
 export async function initAuthPersistence() {
   await setPersistence(auth, browserLocalPersistence);
@@ -38,4 +36,10 @@ export async function logout() {
 
 export function subscribeToAuth(callback: (user: User | null) => void) {
   return onAuthStateChanged(auth, callback);
+}
+
+export async function getIdToken(): Promise<string | null> {
+  const user = auth.currentUser;
+  if (!user) return null;
+  return user.getIdToken();
 }

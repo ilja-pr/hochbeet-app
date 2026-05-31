@@ -1,5 +1,5 @@
 import { onValue, ref, set, update } from "firebase/database";
-import { db } from "@/lib/auth";
+import { db } from "@/lib/firebase";
 
 export type PlantSettings = {
   threshold: number;
@@ -26,7 +26,24 @@ export function subscribeToSettings(
 
   return onValue(settingsRef, (snapshot) => {
     const data = snapshot.val();
-    callback(data ?? defaultSettings);
+    // Merge mit Defaults, falls in DB Felder fehlen
+    if (!data) {
+      callback(defaultSettings);
+      return;
+    }
+    callback({
+      threshold: data.threshold ?? defaultSettings.threshold,
+      measurementIntervalMinutes:
+        data.measurementIntervalMinutes ??
+        defaultSettings.measurementIntervalMinutes,
+      notifications: {
+        emailEnabled:
+          data.notifications?.emailEnabled ??
+          defaultSettings.notifications.emailEnabled,
+        email:
+          data.notifications?.email ?? defaultSettings.notifications.email,
+      },
+    });
   });
 }
 

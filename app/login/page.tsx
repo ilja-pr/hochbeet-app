@@ -27,7 +27,7 @@ export default function LoginPage() {
     try {
       await loginWithEmail(email, password);
       router.replace("/settings");
-    } catch (error: any) {
+    } catch (error: unknown) {
       setErrorText("Anmeldung fehlgeschlagen. Bitte E-Mail und Passwort prüfen.");
       console.error(error);
     } finally {
