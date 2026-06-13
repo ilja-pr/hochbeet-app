@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
-import { sendBrevoEmail } from "@/lib/brevo";
+import { sendBrevoEmail, buildTestEmail } from "@/lib/brevo";
 import { getAuth } from "firebase-admin/auth";
 import { getApps, getApp, initializeApp, cert } from "firebase-admin/app";
 
@@ -62,40 +62,20 @@ export async function POST(request: NextRequest) {
       status?: string;
     } | null;
 
-    const subject = "Test-Mail vom Hochbeet Monitor";
     const moisture = current?.moisture ?? 0;
     const status = current?.status ?? "Unbekannt";
 
-    const textContent = `Hallo!
+    const dashboardUrl =
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
 
-Das ist eine Test-Mail von deinem Hochbeet Monitor.
-Wenn du das liest, funktioniert der E-Mail-Versand.
-
-Aktuelle Bodenfeuchte: ${moisture}% (${status})
-
-Viele Grüße,
-dein Hochbeet`;
-
-    const htmlContent = `<!DOCTYPE html>
-<html lang="de">
-<body style="margin:0;padding:24px;font-family:Arial,sans-serif;background:#f6f8fb;">
-  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px;border:1px solid #e2e8f0;">
-    <h1 style="margin:0 0 16px;color:#0f172a;font-size:22px;">Test-Mail erfolgreich</h1>
-    <p style="font-size:16px;line-height:1.6;color:#334155;">
-      Wenn du das liest, funktioniert der E-Mail-Versand deines Hochbeet Monitors.
-    </p>
-    <p style="font-size:16px;line-height:1.6;color:#334155;">
-      Aktuelle Bodenfeuchte: <strong>${moisture}%</strong> (${status})
-    </p>
-  </div>
-</body>
-</html>`;
+    const mail = buildTestEmail({ moisture, status, dashboardUrl });
 
     const result = await sendBrevoEmail({
       to: email,
-      subject,
-      htmlContent,
-      textContent,
+      subject: mail.subject,
+      htmlContent: mail.htmlContent,
+      textContent: mail.textContent,
     });
 
     if (!result.ok) {

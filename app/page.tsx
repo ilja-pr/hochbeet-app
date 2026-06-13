@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { onValue, ref, query, limitToLast, orderByChild } from "firebase/database";
 import { db } from "@/lib/firebase";
 import { weatherCodeToText } from "@/lib/weather-code";
@@ -8,23 +8,17 @@ import { getWateringRecommendation } from "@/lib/watering";
 
 import DashboardHeader from "@/components/DashboardHeader";
 import MoistureCard from "@/components/MoistureCard";
-import MoistureChart from "@/components/MoistureChart";
+import HistoryView from "@/components/HistoryView";
 import OverviewCard from "@/components/OverviewCard";
 import WeatherCard from "@/components/WeatherCard";
 import WateringRecommendationCard from "@/components/WateringRecommendationCard";
+import type { HistoryItem } from "@/lib/history";
 
 type CurrentData = {
   raw?: number;
   moisture?: number;
   status?: string;
   updatedAt?: number;
-};
-
-type HistoryItem = {
-  raw: number;
-  moisture: number;
-  status?: string;
-  ts: number;
 };
 
 type WeatherDaily = {
@@ -56,16 +50,6 @@ function formatDate(ts?: number) {
   });
 }
 
-function formatWeekLabel(ts: number) {
-  const date = new Date(ts);
-  const weekday = date.toLocaleDateString("de-DE", { weekday: "short" });
-  const time = date.toLocaleTimeString("de-DE", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  return `${weekday} ${time}`;
-}
-
 function formatRain(prob?: number | null, amount?: number | null) {
   if (prob == null) return "--";
   return `${prob}% · ${amount ?? 0} mm`;
@@ -84,11 +68,12 @@ export default function HomePage() {
       setCurrent(snapshot.val() ?? null);
     });
 
-    // History: bis zu 400 Einträge laden (7 Tage * 48 Messungen + Reserve)
+    // History: bis zu 6000 Einträge laden (ca. mehrere Monate à 48/Tag),
+    // damit man in der Verlaufsansicht Wochen zurückblättern kann.
     const historyRef = query(
       ref(db, "plants/plant1/history"),
       orderByChild("ts"),
-      limitToLast(400)
+      limitToLast(6000)
     );
     const unsubHistory = onValue(historyRef, (snapshot) => {
       const data = snapshot.val();
@@ -98,11 +83,7 @@ export default function HomePage() {
       }
       const arr: HistoryItem[] = Object.values(data);
       arr.sort((a, b) => a.ts - b.ts);
-
-      // Nur die letzten 7 Tage anzeigen
-      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      const lastWeek = arr.filter((item) => item.ts >= sevenDaysAgo);
-      setHistory(lastWeek);
+      setHistory(arr);
     });
 
     return () => {
@@ -138,13 +119,6 @@ export default function HomePage() {
       clearInterval(interval);
     };
   }, []);
-
-  const chartData = useMemo(() => {
-    return history.map((item) => ({
-      time: formatWeekLabel(item.ts),
-      moisture: item.moisture,
-    }));
-  }, [history]);
 
   const weatherText = weatherCodeToText(
     weather?.current?.weather_code ?? weather?.today?.weather_code
@@ -216,7 +190,7 @@ export default function HomePage() {
         </section>
 
         <section className="mt-5 grid gap-5 lg:grid-cols-[2fr_1fr]">
-          <MoistureChart data={chartData} />
+          <HistoryView history={history} />
           <OverviewCard rows={overviewRows} />
         </section>
       </div>

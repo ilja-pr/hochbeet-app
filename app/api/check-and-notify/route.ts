@@ -135,14 +135,15 @@ export async function GET(request: NextRequest) {
     // Mail schicken
     const dashboardUrl =
       process.env.NEXT_PUBLIC_BASE_URL ||
-      process.env.VERCEL_URL
+      (process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
-        : undefined;
+        : undefined);
 
     const mail = buildDryAlertEmail({
       moisture: current.moisture,
       threshold,
       status: current.status ?? "Trocken",
+      measuredAt: current.updatedAt,
       dashboardUrl,
     });
 

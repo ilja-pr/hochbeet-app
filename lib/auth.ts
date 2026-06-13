@@ -1,4 +1,3 @@
-import { getApp, getApps, initializeApp } from "firebase/app";
 import {
   getAuth,
   setPersistence,
@@ -6,40 +5,38 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  type Auth,
   type User,
 } from "firebase/auth";
+import { getFirebaseApp } from "@/lib/firebase";
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL!,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
-};
-
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-
-export const auth = getAuth(app);
+// Lazy: getAuth() erst zur Laufzeit aufrufen, nicht beim Modul-Import,
+// damit der Build ohne Umgebungsvariablen nicht abbricht.
+let _auth: Auth | null = null;
+export function getAuthClient(): Auth {
+  if (!_auth) _auth = getAuth(getFirebaseApp());
+  return _auth;
+}
 
 export async function initAuthPersistence() {
-  await setPersistence(auth, browserLocalPersistence);
+  await setPersistence(getAuthClient(), browserLocalPersistence);
 }
 
 export async function loginWithEmail(email: string, password: string) {
   await initAuthPersistence();
-  return signInWithEmailAndPassword(auth, email, password);
+  return signInWithEmailAndPassword(getAuthClient(), email, password);
 }
 
 export async function logout() {
-  return signOut(auth);
+  return signOut(getAuthClient());
 }
 
 export function subscribeToAuth(callback: (user: User | null) => void) {
-  return onAuthStateChanged(auth, callback);
+  return onAuthStateChanged(getAuthClient(), callback);
 }
 
 export async function getIdToken(): Promise<string | null> {
-  const user = auth.currentUser;
+  const user = getAuthClient().currentUser;
   if (!user) return null;
   return user.getIdToken();
 }
