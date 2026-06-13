@@ -1,52 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminDb } from "@/lib/firebase-admin";
 import { sendBrevoEmail, buildTestEmail } from "@/lib/brevo";
-import { getAuth } from "firebase-admin/auth";
-import { getApps, getApp, initializeApp, cert } from "firebase-admin/app";
-
-function ensureAdmin() {
-  if (getApps().length === 0) {
-    initializeApp({
-      credential: cert({
-        projectId: process.env.FIREBASE_PROJECT_ID!,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL!,
-        privateKey: (process.env.FIREBASE_PRIVATE_KEY ?? "").replace(/\\n/g, "\n"),
-      }),
-      databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
-    });
-  }
-  return getApp();
-}
 
 export async function POST(request: NextRequest) {
   try {
-    // Login-Prüfung über Firebase ID Token
-    const authHeader = request.headers.get("authorization");
-    const idToken = authHeader?.startsWith("Bearer ")
-      ? authHeader.slice(7)
-      : null;
-
-    if (!idToken) {
-      return NextResponse.json(
-        { ok: false, error: "missing_token" },
-        { status: 401 }
-      );
-    }
-
-    ensureAdmin();
-    try {
-      await getAuth().verifyIdToken(idToken);
-    } catch {
-      return NextResponse.json(
-        { ok: false, error: "invalid_token" },
-        { status: 401 }
-      );
-    }
-
-    // E-Mail aus Body holen
     const body = await request.json().catch(() => ({}));
-    const email = body?.email as string | undefined;
 
+    // Einfacher Schutz: geheimes Wort muss mitgeschickt werden und
+    // mit der Umgebungsvariable MAIL_SECRET übereinstimmen.
+    const secret = body?.secret as string | undefined;
+    const expected = process.env.MAIL_SECRET;
+
+    if (expected && secret !== expected) {
+      return NextResponse.json(
+        { ok: false, error: "unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    // Empfänger-Adresse
+    const email = body?.email as string | undefined;
     if (!email || !email.includes("@")) {
       return NextResponse.json(
         { ok: false, error: "invalid_email" },
@@ -54,16 +26,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Aktueller Wert für die Test-Mail
-    const db = getAdminDb();
-    const currentSnap = await db.ref("plants/plant1/current").get();
-    const current = currentSnap.val() as {
-      moisture?: number;
-      status?: string;
-    } | null;
-
-    const moisture = current?.moisture ?? 0;
-    const status = current?.status ?? "Unbekannt";
+    // Aktueller Messwert kommt direkt vom Browser mit
+    const moisture =
+      typeof body?.moisture === "number" ? body.moisture : 0;
+    const status =
+      typeof body?.status === "string" && body.status
+        ? body.status
+        : "Unbekannt";
 
     const dashboardUrl =
       process.env.NEXT_PUBLIC_BASE_URL ||
@@ -81,11 +50,7 @@ export async function POST(request: NextRequest) {
     if (!result.ok) {
       console.error("Brevo Fehler:", result.status, result.body);
       return NextResponse.json(
-        {
-          ok: false,
-          error: "brevo_failed",
-          status: result.status,
-        },
+        { ok: false, error: "brevo_failed", status: result.status },
         { status: 502 }
       );
     }
@@ -93,9 +58,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, to: email });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown";
-    return NextResponse.json(
-      { ok: false, error: message },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

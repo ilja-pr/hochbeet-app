@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
 import { onValue, ref } from "firebase/database";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { db } from "@/lib/firebase";
-import { getIdToken } from "@/lib/auth";
 import {
   defaultSettings,
   saveSettings,
@@ -41,6 +40,9 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState("");
   const [testError, setTestError] = useState("");
+  const [current, setCurrent] = useState<{ moisture?: number; status?: string }>(
+    {}
+  );
 
   useEffect(() => {
     return subscribeToSettings((nextSettings) => {
@@ -52,6 +54,13 @@ export default function SettingsPage() {
     const r = ref(db, "plants/plant1/notifications");
     return onValue(r, (snapshot) => {
       setNotificationStatus(snapshot.val() ?? {});
+    });
+  }, []);
+
+  useEffect(() => {
+    const r = ref(db, "plants/plant1/current");
+    return onValue(r, (snapshot) => {
+      setCurrent(snapshot.val() ?? {});
     });
   }, []);
 
@@ -78,14 +87,13 @@ export default function SettingsPage() {
     setTestError("");
 
     try {
-      const token = await getIdToken();
-      if (!token) {
-        setTestError("Bitte erneut anmelden.");
-        return;
-      }
-
-      if (!settings.notifications.email || !settings.notifications.email.includes("@")) {
-        setTestError("Bitte erst eine gültige E-Mail-Adresse eintragen und speichern.");
+      if (
+        !settings.notifications.email ||
+        !settings.notifications.email.includes("@")
+      ) {
+        setTestError(
+          "Bitte erst eine gültige E-Mail-Adresse eintragen und speichern."
+        );
         return;
       }
 
@@ -93,9 +101,13 @@ export default function SettingsPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ email: settings.notifications.email }),
+        body: JSON.stringify({
+          email: settings.notifications.email,
+          secret: process.env.NEXT_PUBLIC_MAIL_SECRET ?? "",
+          moisture: current.moisture ?? 0,
+          status: current.status ?? "Unbekannt",
+        }),
       });
 
       const data = await res.json();
